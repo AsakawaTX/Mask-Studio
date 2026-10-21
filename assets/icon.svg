@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- 蒙版工坊图标：底层一块暗色方块，上层一块亮色方块，
+       被一个柔边圆形"擦"出一部分 —— 直观表达"只取上层图的一部分"。 -->
+  <defs>
+    <radialGradient id="softEdge" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="1"/>
+      <stop offset="55%" stop-color="#ffffff" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <mask id="softMask">
+      <rect width="64" height="64" fill="#000000"/>
+      <circle cx="41" cy="25" r="19" fill="url(#softEdge)"/>
+    </mask>
+  </defs>
+
+  <rect width="64" height="64" fill="#000000"/>
+  <rect x="6" y="27" width="31" height="31" fill="#3d3d3d"/>
+  <rect x="21" y="10" width="31" height="31" fill="#e6e6e6" mask="url(#softMask)"/>
+</svg>

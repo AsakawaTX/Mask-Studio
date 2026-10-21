@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>蒙版工坊</title>
+
+  <!-- 图标源就是 assets/icon.svg：既当网页 favicon，也是以后打包桌面版图标的来源 -->
+  <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+
+  <!-- 界面不引用任何外部字体：离线可用，启动不阻塞在网络请求上 -->
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- 拖放遮罩：拖入图片即导入（第一张当底层，之后当上层；按住 Shift 强制当底层） -->
+  <div class="drag-drop-overlay" id="dragDropOverlay">
+    <h3>松开鼠标导入图片</h3>
+    <p>第一张作为「底层图」，之后拖入的作为「上层图」 · 按住 Shift 强制作为底层图</p>
+  </div>
+
+  <main class="app-main">
+    <div class="studio">
+
+      <!-- 左：舞台。画布按「适应窗口」铺满，支持滚轮缩放 / 空格拖动平移 -->
+      <section class="stage-col">
+        <div class="canvas-wrap" id="canvasWrap">
+          <canvas class="view-canvas" id="viewCanvas"></canvas>
+
+          <!-- 画笔光标：外圈=笔刷直径，内圈虚线=硬芯（柔度越大硬芯越大） -->
+          <div class="brush-cursor" id="brushCursor" hidden>
+            <span class="bc-outer"></span>
+            <span class="bc-core" id="bcCore"></span>
+          </div>
+
+          <div class="stage-hint" id="stageHint">拖入或导入两张图片开始合成</div>
+        </div>
+
+        <!-- 底部条：缩放 / 画布尺寸 / 撤销重做 -->
+        <div class="stage-bar">
+          <button type="button" class="bar-btn" id="btnZoomOut" title="缩小（滚轮）">−</button>
+          <span class="bar-val" id="zoomVal">100%</span>
+          <button type="button" class="bar-btn" id="btnZoomIn" title="放大（滚轮）">＋</button>
+          <button type="button" class="bar-btn" id="btnFit" title="适应窗口（快捷键 0）">适应窗口</button>
+          <button type="button" class="bar-btn" id="btnActual" title="实际像素（快捷键 1）">100%</button>
+          <span class="bar-spacer"></span>
+          <button type="button" class="bar-btn" id="btnUndo" title="撤销（Ctrl+Z）" disabled>撤销</button>
+          <button type="button" class="bar-btn" id="btnRedo" title="重做（Ctrl+Shift+Z）" disabled>重做</button>
+        </div>
+      </section>
+
+      <!-- 右：控制栏。顶部工具切换常驻，中间参数可滚动，底部导出 -->
+      <section class="panel">
+        <div class="panel-top">
+          <input type="file" id="fileTopInput" accept="image/*" hidden />
+          <input type="file" id="fileBaseInput" accept="image/*" hidden />
+
+          <!-- 工具开关：画笔（涂抹显现上层图）/ 橡皮（擦掉已显现的区域） -->
+          <div class="btn-toggle-group" id="toolToggle">
+            <button type="button" class="toggle-btn active" data-tool="paint">画笔</button>
+            <button type="button" class="toggle-btn" data-tool="erase">橡皮</button>
+          </div>
+        </div>
+
+        <div class="panel-scroll">
+
+          <!-- ---------------- 01 图层 ----------------
+               上层图 = 被蒙版控制的那张（只显现涂抹到的部分）；
+               底层图 = 完整保留的那张（决定画布尺寸）。 -->
+          <div class="ctrl-group" data-group="layers">
+            <div class="ctrl-group-head" data-toggle="layers">
+              <div class="ctrl-group-title"><span class="ctrl-num">01</span>图层</div>
+              <span class="ctrl-group-arrow">
+                <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="2 4 6 8 10 4"></polyline>
+                </svg>
+              </span>
+            </div>
+            <div class="ctrl-body">
+              <div class="ctrl-field">
+                <div class="tool-label"><span>上层图（受蒙版控制）</span></div>
+                <div class="layer-row">
+                  <button type="button" class="ctrl-btn" id="btnPickTop">导入上层图</button>
+                  <button type="button" class="btn-clear-img" id="btnClearTop" title="移除上层图" hidden>✕</button>
+                </div>
+                <div class="layer-name" id="topName">未导入</div>
+              </div>
+
+              <div class="ctrl-field">
+                <div class="tool-label"><span>底层图（完整保留）</span></div>
+                <div class="layer-row">
+                  <button type="button" class="ctrl-btn" id="btnPickBase">导入底层图</button>
+                  <button type="button" class="btn-clear-img" id="btnClearBase" title="移除底层图" hidden>✕</button>
+                </div>
+                <div class="layer-name" id="baseName">未导入</div>
+              </div>
+
+              <div class="ctrl-field">
+                <div class="tool-label"><span>上层图适配</span></div>
+                <div class="btn-toggle-group" id="fitToggle">
+                  <button type="button" class="toggle-btn active" data-fit="cover">覆盖</button>
+                  <button type="button" class="toggle-btn" data-fit="contain">适应</button>
+                  <button type="button" class="toggle-btn" data-fit="stretch">拉伸</button>
+                </div>
+              </div>
+
+              <button type="button" class="ctrl-btn" id="btnSwap">交换上下层</button>
+            </div>
+          </div>
+
+          <!-- ---------------- 02 画笔 ----------------
+               边缘柔度是核心参数：0% = 硬边（实心圆），100% = 从圆心一路羽化到边缘。 -->
+          <div class="ctrl-group" data-group="brush">
+            <div class="ctrl-group-head" data-toggle="brush">
+              <div class="ctrl-group-title"><span class="ctrl-num">02</span>画笔</div>
+              <span class="ctrl-group-arrow">
+                <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="2 4 6 8 10 4"></polyline>
+                </svg>
+              </span>
+            </div>
+            <div class="ctrl-body">
+              <div class="ctrl-field">
+                <div class="tool-label"><span>笔刷大小</span><span class="slider-val" id="sizeVal">240 px</span></div>
+                <input type="range" id="sizeSlider" min="2" max="2000" step="1" value="240" />
+              </div>
+
+              <div class="ctrl-field">
+                <div class="tool-label"><span>边缘柔度</span><span class="slider-val" id="softVal">60%</span></div>
+                <input type="range" id="softSlider" min="0" max="100" step="1" value="60"
+                       title="0% = 硬边（实心圆）· 100% = 从圆心一路羽化到边缘" />
+              </div>
+
+              <div class="ctrl-field">
+                <div class="tool-label"><span>不透明度</span><span class="slider-val" id="opacityVal">100%</span></div>
+                <input type="range" id="opacitySlider" min="1" max="100" step="1" value="100" />
+              </div>
+
+              <button type="button" class="ctrl-btn" id="btnClearMask">清空蒙版</button>
+            </div>
+          </div>
+
+          <!-- ---------------- 03 视图 ---------------- -->
+          <div class="ctrl-group" data-group="view">
+            <div class="ctrl-group-head" data-toggle="view">
+              <div class="ctrl-group-title"><span class="ctrl-num">03</span>视图</div>
+              <span class="ctrl-group-arrow">
+                <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="2 4 6 8 10 4"></polyline>
+                </svg>
+              </span>
+            </div>
+            <div class="ctrl-body">
+              <label class="ctrl-check">
+                <input type="checkbox" id="showMaskToggle" />
+                <span>显示蒙版（红色）</span>
+              </label>
+              <div class="ctrl-note">
+                左键涂抹显现上层图 · 空格 / 右键拖动平移 · 滚轮缩放 · [ ] 调笔刷大小 · B / E 切换画笔与橡皮
+              </div>
+            </div>
+          </div>
+
+          <!-- 导出没有可选项：尺寸与格式严格跟随底层图，所以这里不放任何控件。
+               输出规格作为只读信息显示在面板底部的导出按钮上方。 -->
+
+        </div>
+
+        <div class="panel-foot">
+          <div class="export-info" id="exportInfo">—</div>
+          <button type="button" class="export-btn" id="btnExport">导出</button>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

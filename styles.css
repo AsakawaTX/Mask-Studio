@@ -1,0 +1,506 @@
+/* ============================================================
+   蒙版工坊 · 样式表
+   沿用「图文工坊」的极简工业风：纯黑白灰、零圆角、零阴影、零渐变。
+   界面只有「线」和「字」两种元素 —— 区分层次靠 1px 分隔线和灰度。
+
+   唯一保留的彩色是**工具**（画笔光标 / 蒙版预览红）：
+   那是工具不是界面，黑白光标在浅色照片上会看不见。
+
+   性能约定：不引用任何外部字体，不用 transition/animation 做无谓动效。
+   ============================================================ */
+
+:root {
+  --bg: #000000;          /* 页面底 */
+  --panel: #0b0b0b;       /* 面板 */
+  --sunken: #050505;      /* 凹陷区（输入框 / 底栏 / 画布容器） */
+  --line: #242424;        /* 分隔线 */
+  --line-strong: #3d3d3d; /* 控件边框 */
+  --fg: #e6e6e6;          /* 主文字 */
+  --fg-dim: #8a8a8a;      /* 次要文字 */
+  --fg-off: #4a4a4a;      /* 禁用 */
+  --hi: #ffffff;          /* 高亮 / 选中 */
+
+  /* 工具色：画笔光标与蒙版预览 */
+  --ui: #38bdf8;
+
+  --font-ui: "Segoe UI", -apple-system, BlinkMacSystemFont, "Microsoft YaHei", sans-serif;
+  --font-num: "Consolas", "SFMono-Regular", "Courier New", monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+[hidden] { display: none !important; }
+
+body {
+  font-family: var(--font-ui);
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow: hidden;
+  /* 整页 = 舞台 + 控制栏两栏。必须写死 height：舞台宽度由容器实测高度算出来，
+     容器高度若由内容决定就会形成正反馈，最后整页溢出。 */
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+button { font-family: inherit; }
+
+/* 所有控件统一：直角、1px 边 */
+button, input { border-radius: 0; }
+
+/* ---- 垂直节奏：面板内行高一律取整数，避免小数相位导致文字上下差 1px ---- */
+.panel { line-height: 16px; }
+.panel .ctrl-num,
+.panel .layer-name,
+.panel .ctrl-note { line-height: 14px; }
+.panel .ctrl-group-head { line-height: 17px; }
+.panel .export-btn { line-height: 19px; }
+.panel .ctrl-btn,
+.panel .toggle-btn,
+.panel .btn-clear-img,
+.panel .bar-btn { line-height: 16px; }
+
+/* ---------------- 通用小件 ---------------- */
+
+.tool-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg-dim);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  letter-spacing: 0.2px;
+}
+
+.slider-val {
+  font-family: var(--font-num);
+  font-size: 11px;
+  color: var(--fg);
+  font-weight: 700;
+  min-width: 48px;
+  text-align: right;
+}
+
+/* 滑杆：细轨 + 白色方块把手，工业仪表感 */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 16px;
+  background: transparent;
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-runnable-track { height: 2px; background: var(--line-strong); }
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 8px;
+  height: 14px;
+  margin-top: -6px;
+  background: var(--hi);
+  border: 0;
+}
+input[type="range"]::-moz-range-track { height: 2px; background: var(--line-strong); }
+input[type="range"]::-moz-range-thumb { width: 8px; height: 14px; background: var(--hi); border: 0; border-radius: 0; }
+
+/* 勾选框：空心方框 / 选中填白 + 黑色对勾 */
+input[type="checkbox"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 13px;
+  height: 13px;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  cursor: pointer;
+  flex: none;
+}
+input[type="checkbox"]:checked {
+  background-color: var(--hi);
+  border-color: var(--hi);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.5l2.5 2.5 4.5-5.5' fill='none' stroke='%23000000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 10px 10px;
+}
+
+.ctrl-check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--fg-dim);
+  cursor: pointer;
+  user-select: none;
+}
+.ctrl-check:hover { color: var(--fg); }
+
+.ctrl-note {
+  font-size: 10.5px;
+  color: var(--fg-off);
+  line-height: 1.6;
+}
+
+/* ---------------- 主体：舞台在左 + 控制栏在右 ---------------- */
+main.app-main {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+}
+
+.studio {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 296px;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  overflow: hidden;
+  min-height: 0;
+}
+
+.panel-top {
+  flex: none;
+  padding: 10px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.panel-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 10px 10px;
+  display: flex;
+  flex-direction: column;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+.panel-scroll::-webkit-scrollbar { width: 8px; }
+.panel-scroll::-webkit-scrollbar-track { background: transparent; }
+.panel-scroll::-webkit-scrollbar-thumb { background: var(--line-strong); }
+
+.panel-foot {
+  flex: none;
+  padding: 8px;
+  border-top: 1px solid var(--line);
+  background: var(--sunken);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* 导出规格：只读信息，不是选项 —— 尺寸与格式严格跟随底层图 */
+.export-info {
+  font-family: var(--font-num);
+  font-size: 10.5px;
+  line-height: 14px;
+  color: var(--fg-dim);
+  text-align: center;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- 分组：只用一条顶部分隔线 + 一个编号来分段，不做卡片嵌套 ---- */
+.ctrl-group {
+  flex: none;
+  border-top: 1px solid var(--line);
+  padding: 10px 0 12px;
+}
+.ctrl-group:first-child { border-top: 0; }
+
+.ctrl-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--fg);
+  letter-spacing: 0.5px;
+  margin-bottom: 9px;
+  cursor: pointer;
+  user-select: none;
+}
+.ctrl-group-head:hover { color: var(--hi); }
+
+.ctrl-group-title { display: flex; align-items: baseline; gap: 7px; }
+
+.ctrl-group-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fg-off);
+  transition: transform 0.18s ease, color 0.15s ease;
+}
+.ctrl-group-head:hover .ctrl-group-arrow { color: var(--hi); }
+.ctrl-group.is-collapsed .ctrl-group-arrow { transform: rotate(-90deg); }
+.ctrl-group.is-collapsed .ctrl-body { display: none; }
+.ctrl-group.is-collapsed { padding-bottom: 6px; }
+
+.ctrl-num {
+  font-family: var(--font-num);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--fg-off);
+  letter-spacing: 0;
+}
+
+.ctrl-body { display: flex; flex-direction: column; gap: 9px; }
+
+.ctrl-field { display: flex; flex-direction: column; gap: 4px; }
+
+.ctrl-btn {
+  width: 100%;
+  height: 28px;
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  color: var(--fg-dim);
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 0 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.ctrl-btn:hover:not(:disabled) { background: var(--hi); border-color: var(--hi); color: #000; }
+.ctrl-btn:disabled { color: var(--fg-off); border-color: var(--line); cursor: not-allowed; }
+
+/* 分段开关：均分宽度，选中高亮反色 */
+.btn-toggle-group { display: flex; width: 100%; gap: 0; }
+.toggle-btn {
+  flex: 1 1 0;
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  border-left: 0;
+  color: var(--fg-dim);
+  padding: 5px 2px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  text-align: center;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.toggle-btn:first-child { border-left: 1px solid var(--line-strong); }
+.toggle-btn:hover { color: var(--fg); }
+.toggle-btn.active { background: var(--hi); border-color: var(--hi); color: #000; font-weight: 700; }
+
+/* 图层行：按钮占满 + 右侧移除按钮 */
+.layer-row { display: flex; align-items: center; gap: 5px; }
+.layer-row .ctrl-btn { flex: 1 1 auto; min-width: 0; }
+
+.btn-clear-img {
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: 1px solid rgba(220, 38, 38, 0.45);
+  color: #ef4444;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.btn-clear-img:hover { background: #dc2626; border-color: #dc2626; color: #fff; }
+
+.layer-name {
+  font-size: 10.5px;
+  color: var(--fg-off);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.layer-name.is-set { color: var(--fg-dim); }
+
+/* ---------------- 导出按钮 ---------------- */
+.export-btn {
+  width: 100%;
+  background: var(--hi);
+  border: 1px solid var(--hi);
+  color: #000;
+  padding: 8px 12px 10px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  text-indent: 2px;
+  cursor: pointer;
+}
+.export-btn:hover { background: transparent; color: var(--hi); }
+.export-btn:disabled { background: transparent; border-color: var(--line-strong); color: var(--fg-off); cursor: progress; }
+
+/* ---------------- 舞台 ---------------- */
+.stage-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; min-height: 0; }
+
+.canvas-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 300px;
+  min-width: 0;
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+}
+/* 画笔就位时隐藏系统光标，用自绘的笔刷圈代替 */
+.canvas-wrap.is-brush { cursor: none; }
+.canvas-wrap.is-panning { cursor: grabbing; }
+
+.view-canvas { display: block; width: 100%; height: 100%; }
+
+/* 舞台提示：贴画布顶部居中（不再压在画面正中，涂抹时也不会挡住正在画的地方）。
+   之前用 --fg-off —— 那是本项目的「禁用态」灰度，配 55% 黑底叠在深色棋盘格上，
+   糊成一层"蒙版"，根本读不清。提示是给人看的，必须用可读的前景色。 */
+.stage-hint {
+  position: absolute;
+  left: 50%;
+  top: 14px;
+  transform: translateX(-50%);
+  max-width: calc(100% - 32px);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg);
+  letter-spacing: 0.5px;
+  line-height: 18px;
+  pointer-events: none;
+  text-align: center;
+  padding: 7px 14px;
+  border: 1px solid var(--line-strong);
+  background: rgba(10, 10, 10, 0.94);
+  z-index: 10;              /* 明确压住画布；低于画笔光标（20） */
+}
+
+/* 画笔光标：外圈 = 笔刷直径，内圈虚线 = 硬芯（柔度越大硬芯越大） */
+.brush-cursor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  z-index: 20;
+  will-change: transform;
+}
+.bc-outer {
+  position: absolute;
+  inset: 0;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.65);
+}
+.bc-core {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  border: 1px dashed rgba(56, 189, 248, 0.95);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45);
+}
+
+/* ---------------- 舞台底部条 ---------------- */
+.stage-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--fg-dim);
+}
+.bar-spacer { flex: 1 1 auto; }
+
+.bar-btn {
+  flex: none;
+  height: 24px;
+  padding: 0 9px;
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  color: var(--fg-dim);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.bar-btn:hover:not(:disabled) { background: var(--hi); border-color: var(--hi); color: #000; }
+.bar-btn:disabled { color: var(--fg-off); border-color: var(--line); cursor: not-allowed; }
+
+.bar-val {
+  flex: none;
+  font-family: var(--font-num);
+  font-size: 11px;
+  color: var(--fg);
+  min-width: 52px;
+  text-align: center;
+}
+
+/* ---------------- 拖放遮罩 ---------------- */
+.drag-drop-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.92);
+  border: 2px dashed var(--hi);
+  z-index: 9999;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+}
+.drag-drop-overlay.active { display: flex; }
+.drag-drop-overlay h3 { font-size: 18px; color: var(--hi); font-weight: 700; letter-spacing: 1px; }
+.drag-drop-overlay p { font-size: 12px; color: var(--fg-dim); }
+
+/* ---------------- 全局消息提示 (Toast) ----------------
+   贴屏幕**底部**居中：舞台提示（.stage-hint）现在位于画布顶部居中，
+   Toast 若也留在顶部会正好压在提示上面（导入图片时两者必然同时出现）。 */
+.toast {
+  position: fixed;
+  bottom: 58px;
+  left: 50%;
+  transform: translateX(-50%) translateY(8px);
+  width: fit-content;
+  max-width: 80vw;
+  background: rgba(10, 10, 10, 0.95);
+  border: 1px solid var(--hi);
+  color: var(--hi);
+  padding: 8px 16px;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  z-index: 99999;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.18s ease, transform 0.18s ease, visibility 0.18s;
+}
+.toast.show { opacity: 1; visibility: visible; transform: translateX(-50%) translateY(0); }
+
+/* ---------------- 响应式 ---------------- */
+@media (max-width: 1180px) {
+  .studio { grid-template-columns: minmax(0, 1fr) 236px; }
+}
+
+@media (max-width: 900px) {
+  body { display: block; height: auto; min-height: 100vh; overflow: auto; }
+  main.app-main { display: block; }
+  .studio { display: block; }
+  .panel { margin-top: 10px; }
+  .panel-scroll { overflow: visible; }
+  .canvas-wrap { min-height: 340px; }
+}
